@@ -1,0 +1,201 @@
+---
+title: "Trabajo 4 OPT"
+autor: "Trinidad Ibarra"
+format: html
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Introducción
+
+Este trabajo analiza la confianza en los medios de comunicación en Chile a partir de la base de datos ELSOC 2022. La investigación retoma el problema planteado en el Trabajo 1, centrado en comprender cómo varía la confianza en los medios según características sociodemográficas como la edad, el sexo y el nivel educacional. La pregunta que orienta el estudio es: ¿Cómo varía la confianza en los medios de comunicación en Chile según la edad, el sexo y el nivel educacional? A partir de esta pregunta, se plantea como hipótesis que a mayor nivel educacional, menor sería la confianza en los medios de comunicación.
+
+En esta cuarta entrega se integran los análisis previos: el reporte descriptivo desarrollado en el Trabajo 2 y el análisis bivariado del Trabajo 3. Además, se incorporan modelos de regresión para estimar la asociación entre las variables seleccionadas y la confianza en los medios, junto con la visualización de valores predichos. De este modo, el trabajo busca avanzar desde la descripción y asociación hacia una interpretación más precisa de los factores vinculados a la confianza en los medios en Chile.
+
+```{r}
+#| echo: FALSE
+#| message: false
+#| warning: false
+
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(psych)
+library(modelsummary)
+data <- read_dta ("C:/Users/trini/OneDrive/Escritorio/Trabajo_4_OPT/input/ELSOC_2022.dta")
+names(data)
+```
+
+#### Reporte descriptivo del Trabajo 2
+
+En esta sección se retoman los principales resultados descriptivos del Trabajo 2. Se consideran las variables edad, sexo, nivel educacional y confianza en los medios de comunicación, las cuales permiten caracterizar la muestra y contextualizar el análisis posterior de regresión. En términos generales, la muestra presenta una edad promedio cercana a los 51 años, una mayor presencia de mujeres y una concentración en niveles educacionales medios y superiores. Respecto a la confianza en los medios, los resultados muestran una tendencia hacia niveles bajos e intermedios de confianza, lo que se vincula con el problema de investigación planteado.
+
+### Análisis bivariado 
+
+En esta sección se retoma el análisis bivariado desarrollado en el Trabajo 3, con el objetivo de observar el grado de asociación entre las variables principales del estudio. En particular, se analiza la relación entre edad, nivel educacional y confianza en los medios de comunicación, ya que estas variables permiten evaluar la hipótesis planteada: a mayor nivel educacional, menor confianza en los medios.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+variables_principales <- data %>%
+  transmute(
+    edad = as.numeric(edad),
+    nivel_educ = as.numeric(nivel_educ),
+    conf_medios = as.numeric(conf_medios)
+  ) %>%
+  mutate(
+    edad = ifelse(edad < 0, NA, edad),
+    nivel_educ = ifelse(nivel_educ %in% c(1, 2, 3, 4), nivel_educ, NA),
+    conf_medios = ifelse(conf_medios %in% c(1, 2, 3, 4, 5), conf_medios, NA)
+  )
+
+tabla_correlaciones <- cor(
+  variables_principales,
+  use = "pairwise.complete.obs",
+  method = "spearman"
+)
+
+kable(
+  round(tabla_correlaciones, 2),
+  caption = "Tabla de correlaciones entre variables principales del estudio"
+)
+```
+
+La tabla muestra la asociación entre edad, nivel educacional y confianza en los medios de comunicación. En primer lugar, se observa una relación negativa entre edad y nivel educacional (-0,26), lo que indica que, en esta muestra, a mayor edad tiende a presentarse un menor nivel educacional. Respecto a la relación entre edad y confianza en medios, la correlación es positiva pero débil (0,16), lo que sugiere que las personas de mayor edad tienden a mostrar niveles levemente más altos de confianza en los medios. Finalmente, la relación entre nivel educacional y confianza en medios es negativa, pero muy débil (-0,05). Esto va en la dirección de la hipótesis planteada, ya que sugiere que a mayor nivel educacional podría disminuir la confianza en los medios; sin embargo, la asociación es muy baja, por lo que no se puede afirmar una relación fuerte entre ambas variables.
+
+Se utilizó la correlación de Spearman porque algunas variables del análisis son ordinales, como nivel educacional y confianza en los medios. Esta correlación permite evaluar la dirección e intensidad de la asociación entre variables ordenadas, sin asumir una relación lineal estricta ni distribución normal.
+
+### Modelos de regresión 
+
+En esta sección se estiman modelos de regresión lineal con el objetivo de analizar la asociación entre la confianza en los medios de comunicación y las variables sociodemográficas seleccionadas. La variable dependiente es la confianza en medios, mientras que las variables independientes son nivel educacional, edad y sexo. Se estiman modelos progresivos para observar cómo cambia la relación al incorporar nuevas variables.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+data_regresion <- data %>%
+  mutate(
+    conf_medios_num = as.numeric(conf_medios),
+    conf_medios_num = ifelse(conf_medios_num %in% c(1, 2, 3, 4, 5),
+                             conf_medios_num, NA),
+    
+    nivel_educ_num = as.numeric(nivel_educ),
+    nivel_educ_num = ifelse(nivel_educ_num %in% c(1, 2, 3, 4),
+                            nivel_educ_num, NA),
+    
+    edad = as.numeric(edad),
+    edad = ifelse(edad < 0, NA, edad),
+    
+    sexo = factor(sexo,
+                  levels = c(1, 2),
+                  labels = c("Hombre", "Mujer"))
+  ) %>%
+  filter(
+    !is.na(conf_medios_num),
+    !is.na(nivel_educ_num),
+    !is.na(edad),
+    !is.na(sexo)
+  )
+
+modelo_1 <- lm(conf_medios_num ~ nivel_educ_num, data = data_regresion)
+
+modelo_2 <- lm(conf_medios_num ~ nivel_educ_num + edad, data = data_regresion)
+
+modelo_3 <- lm(conf_medios_num ~ nivel_educ_num + edad + sexo, data = data_regresion)
+
+modelsummary(
+  list(
+    "Modelo 1" = modelo_1,
+    "Modelo 2" = modelo_2,
+    "Modelo 3" = modelo_3
+  ),
+  stars = TRUE,
+  statistic = "std.error",
+  gof_omit = "IC|Log|Adj|F"
+)
+```
+
+La tabla presenta tres modelos de regresión lineal que estiman la confianza en los medios de comunicación a partir de distintas variables sociodemográficas. En el *Modelo 1*, se incluye únicamente el nivel educacional. El coeficiente de *nivel_educ_num* es negativo (-0,062), lo que indica que, a mayor nivel educacional, la confianza en los medios tendería a disminuir levemente. Sin embargo, esta asociación no es estadísticamente significativa, por lo que no se puede afirmar una relación clara entre ambas variables. En el *Modelo 2*, se incorpora la edad. En este caso, el nivel educacional sigue mostrando una asociación negativa, aunque más débil (-0,029). La edad presenta un coeficiente positivo (0,009) y estadísticamente significativo, lo que sugiere que, a mayor edad, la confianza en los medios tiende a aumentar levemente. En el *Modelo 3,* se agrega la variable sexo. El coeficiente de *sexoMujer* es positivo (0,055), lo que indica que las mujeres presentarían una confianza levemente mayor en los medios en comparación con los hombres. Sin embargo, esta asociación no es significativa. La edad mantiene una asociación positiva y significativa, mientras que el nivel educacional conserva una relación negativa, pero no significativa.
+
+En conjunto, los modelos muestran que la hipótesis del trabajo recibe un apoyo parcial, ya que el nivel educacional presenta una relación negativa con la confianza en medios, pero esta relación es débil y no significativa. Además, los valores de R² son bajos, lo que indica que las variables incluidas explican una proporción reducida de la variación en la confianza hacia los medios. Por lo tanto, la edad parece ser la variable con mayor evidencia de asociación dentro de los modelos estimados.
+
+### Gráficos de valores predichos 
+
+A continuación, se presenta un gráfico de valores predichos a partir del Modelo 3. Este gráfico permite visualizar cómo cambia la confianza estimada en los medios de comunicación según la edad, manteniendo constantes las demás variables del modelo.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+
+# Datos para predicción usando el Modelo 3
+predicciones_edad <- data.frame(
+  edad = seq(min(data_regresion$edad, na.rm = TRUE),
+             max(data_regresion$edad, na.rm = TRUE),
+             length.out = 100),
+  nivel_educ_num = mean(data_regresion$nivel_educ_num, na.rm = TRUE),
+  sexo = factor("Mujer", levels = levels(data_regresion$sexo))
+)
+
+# Obtener valores predichos
+predicciones_edad$confianza_predicha <- predict(
+  modelo_3,
+  newdata = predicciones_edad
+)
+
+# Gráfico
+ggplot(predicciones_edad,
+       aes(x = edad, y = confianza_predicha)) +
+  geom_line(color = "black", linewidth = 1) +
+  labs(title = "Confianza predicha en medios según edad",
+       x = "Edad",
+       y = "Confianza predicha en medios") +
+  theme_minimal()
+```
+
+El gráfico presenta los valores predichos de confianza en los medios de comunicación según la edad, a partir del Modelo 3 de regresión lineal. Se observa una tendencia ascendente, lo que indica que, manteniendo constantes el nivel educacional y el sexo, las personas de mayor edad tenderían a presentar una confianza ligeramente más alta en los medios. Sin embargo, el cambio es moderado, ya que la confianza predicha se mantiene dentro de valores intermedios. Por lo tanto, la edad aparece como una variable asociada positivamente con la confianza en los medios, aunque su efecto debe interpretarse con cautela.
+
+### Regresión logística
+
+De manera complementaria, se estima un modelo de regresión logística con el objetivo de analizar la probabilidad de confiar en los medios de comunicación. Para esto, la variable dependiente se transforma en dicotómica, donde 0 representa “nada de confianza” y 1 agrupa las categorías de poca, media, bastante y mucha confianza.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+data_logit <- data_regresion %>%
+  mutate(
+    confia_medios = ifelse(conf_medios_num == 1, 0, 1)
+  )
+
+modelo_logit <- glm(
+  confia_medios ~ nivel_educ_num + edad + sexo,
+  data = data_logit,
+  family = binomial
+)
+
+modelsummary(
+  modelo_logit,
+  stars = TRUE,
+  statistic = "std.error",
+  gof_omit = "IC|Log|Adj|F",
+  exponentiate = TRUE
+)
+```
+
+La tabla presenta el modelo de regresión logística, donde la variable dependiente distingue entre quienes no confían en los medios y quienes presentan algún nivel de confianza. Los resultados se interpretan como razones de odds. En este caso, el nivel educacional presenta un valor de 1,042, lo que indicaría una leve mayor probabilidad relativa de confiar en los medios a medida que aumenta el nivel educacional; sin embargo, esta relación no es estadísticamente significativa. La edad presenta un valor de 1,020 y aparece como estadísticamente significativa, lo que sugiere que por cada año adicional de edad aumentan levemente las probabilidades de confiar en los medios. En términos simples, las personas mayores tenderían a tener una probabilidad algo mayor de confiar en los medios de comunicación.
+
+En cuanto al sexo, el valor para las mujeres es de 1,111, lo que indica una probabilidad relativa levemente mayor de confiar en los medios en comparación con los hombres, aunque esta relación no es significativa. En conjunto, el modelo muestra que la edad es la variable que presenta una asociación más clara con la probabilidad de confiar en los medios, mientras que nivel educacional y sexo no muestran efectos concluyentes.
+
+### Conclusión
+
+En conclusión, el Trabajo 4 permitió integrar los análisis descriptivos, bivariados y de regresión en torno a la confianza en los medios de comunicación en Chile. En primer lugar, el reporte descriptivo mostró que la confianza en los medios tiende a concentrarse principalmente en niveles bajos e intermedios, lo que se relaciona con el problema de investigación sobre la crisis de confianza hacia los medios tradicionales.A partir del análisis bivariado, se observó que la relación entre nivel educacional y confianza en los medios es negativa, aunque muy débil. Esto entrega un apoyo parcial a la hipótesis planteada, según la cual a mayor nivel educacional disminuiría la confianza en los medios. Sin embargo, la baja magnitud de la asociación impide afirmar una relación fuerte entre ambas variables. Los modelos de regresión lineal muestran resultados similares. El nivel educacional mantiene una relación negativa con la confianza en los medios, pero esta no resulta estadísticamente significativa. En cambio, la edad aparece como la variable con una asociación más clara, mostrando que las personas de mayor edad tienden a presentar niveles levemente más altos de confianza en los medios. Por su parte, la variable sexo no muestra una relación significativa.
+
+Finalmente, la regresión logística refuerza estos resultados, ya que la edad vuelve a aparecer como una variable significativa en la probabilidad de confiar en los medios. En conjunto, los hallazgos permiten sostener que la hipótesis inicial recibe un apoyo parcial, pero limitado. La confianza en los medios parece estar relacionada débilmente con el nivel educacional, mientras que la edad emerge como un factor más consistente dentro de los modelos estimados.
